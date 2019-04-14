@@ -16,7 +16,7 @@ public:
 	cMesh* mesh;
 
 private:
-	void updateMesh();
+	static void updateMesh(cMesh* mesh, vector<LinearSpring*> springs);
 
 	vector<LinearSpring*> m_springs;
 	vector<FillingSphere*> m_spheres;

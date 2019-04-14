@@ -7,6 +7,7 @@
 //------------------------------------------------------------------------------
 #include "chai3d.h"
 #include "DeformableMesh.h"
+#include "MyProxyAlgorithm.h"
 //------------------------------------------------------------------------------
 #include <GLFW/glfw3.h>
 //------------------------------------------------------------------------------
@@ -56,7 +57,7 @@ cGenericHapticDevicePtr hapticDevice;
 cLabel* labelRates;
 
 // a small sphere (cursor) representing the haptic device 
-cShapeSphere* cursor;
+cToolCursor* tool;
 
 // flag to indicate if the haptic simulation currently running
 bool simulationRunning = false;
@@ -221,7 +222,7 @@ int main(int argc, char* argv[])
 
 	/** Setup Scene */
 	ground = new cMesh();
-	ground->m_material->setWhite();
+	ground->m_material->setBrownSandy();
 	// create vertices
 	int vertex0 = ground->newVertex();
 	int vertex1 = ground->newVertex();
@@ -246,6 +247,11 @@ int main(int argc, char* argv[])
 	// create two triangles by assigning their vertex IDs
 	ground->m_triangles->newTriangle(vertex0, vertex1, vertex2);
 	ground->m_triangles->newTriangle(vertex0, vertex2, vertex3);
+
+	ground->createAABBCollisionDetector(0);
+	ground->m_material->setUseHapticShading(true);
+	ground->setStiffness(2000.0, true);
+
 	world->addChild(ground);
 
 	bubble = new DeformableMesh();
@@ -256,7 +262,7 @@ int main(int argc, char* argv[])
     world->addChild(camera);
 
     // position and orient the camera
-    camera->set( cVector3d (-0.1, 0.0, 0.2),    // camera position (eye)
+    camera->set( cVector3d (0.1, 0.0, 0.2),    // camera position (eye)
                  cVector3d (0.0, 0.0, 0.0),    // look at position (target)
                  cVector3d (0.0, 0.0, 1.0));   // direction of the (up) vector
 
@@ -285,12 +291,6 @@ int main(int argc, char* argv[])
     // define direction of light beam
     light->setDir(0, 0.0, -1.0); 
 
-    // create a sphere (cursor) to represent the haptic device
-    cursor = new cShapeSphere(0.01);
-
-    // insert cursor inside world
-    world->addChild(cursor);
-
     //--------------------------------------------------------------------------
     // HAPTIC DEVICE
     //--------------------------------------------------------------------------
@@ -307,21 +307,28 @@ int main(int argc, char* argv[])
     // calibrate device (if necessary)
     hapticDevice->calibrate();
 
-    // retrieve information about the current haptic device
-    cHapticDeviceInfo info = hapticDevice->getSpecifications();
-
-    // display a reference frame if haptic device supports orientations
-    if (info.m_sensedRotation == true)
-    {
-        // display reference frame
-        cursor->setShowFrame(true);
-
-        // set the size of the reference frame
-        cursor->setFrameSize(0.05);
-    }
-
     // if the device has a gripper, enable the gripper to simulate a user switch
     hapticDevice->setEnableGripperUserSwitch(true);
+
+	tool = new cToolCursor(world);
+	world->addChild(tool);
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	//tool->translate(0.1, 0.0, 0.0);
+
+	// [CPSC.86] replace the tool's proxy rendering algorithm with our own
+	MyProxyAlgorithm* proxyAlgorithm = new MyProxyAlgorithm(bubble);
+	delete tool->m_hapticPoint->m_algorithmFingerProxy;
+	tool->m_hapticPoint->m_algorithmFingerProxy = proxyAlgorithm;
+
+	tool->m_hapticPoint->m_sphereProxy->m_material->setWhite();
+
+	tool->setRadius(0.001, 0);
+
+	tool->setHapticDevice(hapticDevice);
+
+	tool->setWaitForSmallForce(true);
+
+	tool->start();
 
     //--------------------------------------------------------------------------
     // WIDGETS
@@ -532,31 +539,29 @@ void updateHaptics(void)
         bool button = false;
         hapticDevice->getUserSwitch(0, button);
 
+		world->computeGlobalPositions();
 
-        /////////////////////////////////////////////////////////////////////
-        // UPDATE 3D CURSOR MODEL
-        /////////////////////////////////////////////////////////////////////
+		/////////////////////////////////////////////////////////////////////
+		// UPDATE 3D CURSOR MODEL
+		/////////////////////////////////////////////////////////////////////
 
-        // update position and orienation of cursor
-        cursor->setLocalPos(position);
-        cursor->setLocalRot(rotation);
+		tool->updateFromDevice();
 
-        /////////////////////////////////////////////////////////////////////
-        // COMPUTE FORCES
-        /////////////////////////////////////////////////////////////////////
+		/////////////////////////////////////////////////////////////////////
+		// COMPUTE FORCES
+		/////////////////////////////////////////////////////////////////////
 
-        cVector3d force(0, 0, 0);
-        cVector3d torque(0, 0, 0);
-        double gripperForce = 0.0;
+		tool->computeInteractionForces();
 
+		cVector3d force(0, 0, 0);
+		cVector3d torque(0, 0, 0);
+		double gripperForce = 0.0;
 
-        /////////////////////////////////////////////////////////////////////
-        // APPLY FORCES
-        /////////////////////////////////////////////////////////////////////
+		/////////////////////////////////////////////////////////////////////
+		// APPLY FORCES
+		/////////////////////////////////////////////////////////////////////
 
-        // send computed force, torque, and gripper force to haptic device
-        hapticDevice->setForceAndTorqueAndGripperForce(force, torque, gripperForce);
-
+		tool->applyToDevice();
         // signal frequency counter
         freqCounterHaptics.signal(1);
     }

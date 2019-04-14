@@ -23,11 +23,13 @@
     <ClCompile Include="DeformableMesh.cpp" />
     <ClCompile Include="FillingSphere.cpp" />
     <ClCompile Include="LinearSpring.cpp" />
+    <ClCompile Include="MyProxyAlgorithm.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DeformableMesh.h" />
     <ClInclude Include="FillingSphere.h" />
     <ClInclude Include="LinearSpring.h" />
+    <ClInclude Include="MyProxyAlgorithm.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectName>application-GLFW</ProjectName>
