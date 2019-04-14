@@ -254,7 +254,7 @@ int main(int argc, char* argv[])
 
 	world->addChild(ground);
 
-	bubble = new DeformableMesh();
+	bubble = new DeformableMesh(0.05);
 	world->addChild(bubble->mesh);
 
     // create a camera and insert it into the virtual world
