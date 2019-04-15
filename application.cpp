@@ -43,6 +43,9 @@ cWorld* world;
 // a camera to render the world in the window display
 cCamera* camera;
 
+// Play popping sound
+cAudioSource* audioSource;
+
 // a light source to illuminate the objects in the world
 cDirectionalLight *light;
 
@@ -56,7 +59,9 @@ cGenericHapticDevicePtr hapticDevice;
 cLabel* labelRates;
 
 // a small sphere (cursor) representing the haptic device 
-cToolCursor* tool;
+cShapeSphere* cursor;
+constexpr double CURSOR_RADIUS = 0.02;
+constexpr double CURSOR_STIFFNESS = 1000;
 
 // flag to indicate if the haptic simulation currently running
 bool simulationRunning = false;
@@ -86,7 +91,7 @@ int height = 0;
 int swapInterval = 1;
 
 // Scene Objects
-DeformableMesh* bubble;
+vector<DeformableMesh*> bubbles;
 cMesh* ground;
 
 //------------------------------------------------------------------------------
@@ -221,7 +226,8 @@ int main(int argc, char* argv[])
 
 	/** Setup Scene */
 	ground = new cMesh();
-	ground->m_material->setBrownSandy();
+	ground->m_texture = cTexture2d::create();
+	ground->m_texture->loadFromFile("background_texture.jpg");
 	// create vertices
 	int vertex0 = ground->newVertex();
 	int vertex1 = ground->newVertex();
@@ -246,23 +252,34 @@ int main(int argc, char* argv[])
 	// create two triangles by assigning their vertex IDs
 	ground->m_triangles->newTriangle(vertex0, vertex1, vertex2);
 	ground->m_triangles->newTriangle(vertex0, vertex2, vertex3);
+	ground->scale(2, true);
 
 	ground->createAABBCollisionDetector(0.005);
 	ground->m_material->setUseHapticShading(true);
 	ground->setStiffness(2000.0, true);
 
+	ground->m_material->setBrownBurlyWood();
+	ground->setUseTexture(true);
+	ground->setUseTransparency(true, true);
+	ground->setTransparencyLevel(1.0f, true, true, true);
 	world->addChild(ground);
 	
-	bubble = DeformableMesh::createSquareCloth(0.10);
-	bubble->mesh->translate(cVector3d(0, 0, -0.01));
-	world->addChild(bubble->mesh);
+	DeformableMesh* bubble0 = DeformableMesh::createSquareCloth(0.10);
+	// bubble0->m_mesh->translate(cVector3d(0.03, 0, -0.01));
+	world->addChild(bubble0->m_mesh);
+
+	/*DeformableMesh* bubble1 = DeformableMesh::createSquareCloth(0.12);
+	bubble1->m_mesh->translate(cVector3d(-0.07, 0, -0.01));
+	world->addChild(bubble1->m_mesh);*/
+
+	bubbles = { bubble0 };
 
     // create a camera and insert it into the virtual world
     camera = new cCamera(world);
     world->addChild(camera);
 
     // position and orient the camera
-    camera->set( cVector3d (0.1, 0.0, 0.2),    // camera position (eye)
+    camera->set( cVector3d (0.12, 0.0, 0.2),    // camera position (eye)
                  cVector3d (0.0, 0.0, 0.0),    // look at position (target)
                  cVector3d (0.0, 0.0, 1.0));   // direction of the (up) vector
 
@@ -279,6 +296,27 @@ int main(int argc, char* argv[])
     // set vertical mirrored display mode
     camera->setMirrorVertical(mirroredDisplay);
 
+	// create an audio device to play sounds
+	cAudioDevice* audioDevice = new cAudioDevice();
+	// attach audio device to camera
+	camera->attachAudioDevice(audioDevice);
+	// create an audio buffer
+	cAudioBuffer* audioBuffer = new cAudioBuffer();
+	audioBuffer->loadFromFile("bubble_pop.wav");
+
+	audioSource = new cAudioSource();
+	// assign audio buffer to audio source
+	audioSource->setAudioBuffer(audioBuffer);
+
+	// don't loop playing of sound
+	audioSource->setLoop(true);
+	// set audio gain
+	audioSource->setGain(1.0);
+	// set audio pitch
+	audioSource->setPitch(0.2);
+	// play sound
+	audioSource->play();
+
     // create a directional light source
     light = new cDirectionalLight(world);
 
@@ -290,6 +328,11 @@ int main(int argc, char* argv[])
 
     // define direction of light beam
     light->setDir(0, 0.0, -1.0); 
+
+	// create a sphere (cursor) to represent the haptic device
+	cursor = new cShapeSphere(CURSOR_RADIUS);
+
+	world->addChild(cursor);
 
     //--------------------------------------------------------------------------
     // HAPTIC DEVICE
@@ -309,22 +352,6 @@ int main(int argc, char* argv[])
 
     // if the device has a gripper, enable the gripper to simulate a user switch
     hapticDevice->setEnableGripperUserSwitch(true);
-
-	tool = new cToolCursor(world);
-	world->addChild(tool);
-	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-	tool->m_hapticPoint->m_sphereProxy->m_material->setWhite();
-
-	tool->setRadius(0.002, 0.002);
-
-	tool->setHapticDevice(hapticDevice);
-
-	tool->setWaitForSmallForce(true);
-
-	tool->start();
-
-	bubble->m_tool = tool;
 
     //--------------------------------------------------------------------------
     // WIDGETS
@@ -488,7 +515,6 @@ void updateGraphics(void)
     // update position of label
     labelRates->setLocalPos((int)(0.5 * (width - labelRates->getWidth())), 15);
 
-
     /////////////////////////////////////////////////////////////////////
     // RENDER SCENE
     /////////////////////////////////////////////////////////////////////
@@ -544,24 +570,42 @@ void updateHaptics(void)
 		/////////////////////////////////////////////////////////////////////
 		// UPDATE 3D CURSOR MODEL
 		/////////////////////////////////////////////////////////////////////
+		// update position and orientation of cursor
+		cursor->setLocalPos(position);
+		cursor->setLocalRot(rotation);
 
 		/////////////////////////////////////////////////////////////////////
 		// COMPUTE FORCES
 		/////////////////////////////////////////////////////////////////////
+		cVector3d force(0, 0, 0);
+		cVector3d torque(0, 0, 0);
+		double gripperForce = 0.0;
 		double t_current = timer.getCurrentTimeSeconds();
 		if (t_previous > 0.0) {
 			double dt = t_current - t_previous;
-			bubble->update(0.5 * dt);
+			for (int i = 0; i < bubbles.size(); i++) {
+				auto bubble = bubbles[i];
+				bubble->m_current_time = t_current;
+				bubble->updateDevicePos(cursor->getGlobalPos());
+				bubble->update(dt);
+				cVector3d bForce = bubble->computeForce();
+				if (bForce.length() > 1e-6) {
+					force = bForce;
+				}
+				if (bForce.length() > bubble->m_maxForce && bubble->m_disable_time < 0) {
+					bubble->deactivate(t_current);
+					world->removeChild(bubble->m_mesh);
+				}
+			}
 		}
 		t_previous = t_current;
-
-		tool->updateFromDevice();
-		tool->computeInteractionForces();
 
 		/////////////////////////////////////////////////////////////////////
 		// APPLY FORCES
 		/////////////////////////////////////////////////////////////////////
-		tool->applyToDevice();
+
+		// send computed force, torque, and gripper force to haptic device
+		hapticDevice->setForceAndTorqueAndGripperForce(force, torque, gripperForce);
 
         // signal frequency counter
         freqCounterHaptics.signal(1);

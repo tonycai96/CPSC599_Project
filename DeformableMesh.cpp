@@ -10,7 +10,7 @@ using namespace chai3d;
 
 DeformableMesh* DeformableMesh::createSquareCloth(double length) {
 	DeformableMesh* ret = new DeformableMesh();
-	ret->mesh = new cMesh();
+	ret->m_mesh = new cMesh();
 
 	const int N = 16;
 	vector<vector<FillingSphere*>> spheres(N + 1, vector<FillingSphere*>(N + 1));
@@ -21,24 +21,25 @@ DeformableMesh* DeformableMesh::createSquareCloth(double length) {
 			double x = x0 + (1.0 * i / N) * length;
 			double y = y0 = (1.0 * j / N) * length;
 			spheres[i][j] = new FillingSphere(1.0, cVector3d(x, y, 0.01), cVector3d(0, 0, 1));
-			int vertexId = ret->mesh->newVertex();
+			int vertexId = ret->m_mesh->newVertex();
 			ret->m_verticesId.push_back(vertexId);
 			v_ids[i][j] = vertexId;
 			ret->m_spheres.push_back(spheres[i][j]);
-			ret->mesh->m_vertices->setColor(vertexId, cColorf(0, 0, 1));
+			ret->m_mesh->m_vertices->setColor(vertexId, cColorf(0, 0, 1));
+			ret->m_mesh->m_vertices->setTexCoord(vertexId, cVector3d((1.0 * i) / N, (1.0 * j) / N, 0));
 		}
 	}
 	for (int i = 0; i < N; i++) {
 		for (int j = 0; j < N; j++) {
 			int v1 = v_ids[i][j], v2 = v_ids[i][j + 1];
 			int v3 = v_ids[i + 1][j], v4 = v_ids[i + 1][j + 1];
-			ret->mesh->newTriangle(v1, v3, v2);
-			ret->mesh->newTriangle(v2, v3, v4);
+			ret->m_mesh->newTriangle(v1, v3, v2);
+			ret->m_mesh->newTriangle(v2, v3, v4);
 		}
 	}
-	DeformableMesh::updateMesh(ret->mesh, ret->m_spheres, ret->m_verticesId);
-	ret->mesh->setStiffness(1000.0, true);
-	ret->mesh->createAABBCollisionDetector(0.002);
+	DeformableMesh::updateMesh(ret->m_mesh, ret->m_spheres, ret->m_verticesId);
+	ret->m_mesh->setStiffness(1000.0, true);
+	ret->m_mesh->createAABBCollisionDetector(0.002);
 
 	for (int i = 0; i < N; i++) {
 		spheres[0][i]->isFixed = true;
@@ -83,106 +84,133 @@ DeformableMesh* DeformableMesh::createSquareCloth(double length) {
 			}
 		}
 	}
+
+	ret->m_mesh->m_texture = cTexture2d::create();
+	ret->m_mesh->m_texture->loadFromFile("plastic_texture.jpg");
+	ret->m_mesh->setUseTexture(true);
+	ret->m_mesh->setUseTransparency(true, true);
+	ret->m_mesh->setTransparencyLevel(0.75, true, true, true);
+	// Compute initial displacement position
+	for (int i = 0; i < 200; i++) {
+		ret->update(0.001);
+	}
+
+	ret->m_initial_mesh.resize(ret->m_mesh->getNumVertices());
+	for (int i = 0; i < ret->m_mesh->getNumTriangles(); i++) {
+		int vi0 = ret->m_mesh->m_triangles->getVertexIndex0(i);
+		int vi1 = ret->m_mesh->m_triangles->getVertexIndex1(i);
+		int vi2 = ret->m_mesh->m_triangles->getVertexIndex2(i);
+
+		ret->m_initial_mesh[vi0] = ret->m_mesh->m_triangles->m_vertices->getLocalPos(vi0);
+		ret->m_initial_mesh[vi1] = ret->m_mesh->m_triangles->m_vertices->getLocalPos(vi1);
+		ret->m_initial_mesh[vi2] = ret->m_mesh->m_triangles->m_vertices->getLocalPos(vi2);
+	}
+	
 	return ret;
 }
 
-//DeformableMesh::DeformableMesh(double radius) {
-//	mesh = new cMesh();
-//	const int NUM_DIV = 16;
-//	m_spheres.resize(NUM_DIV + 1, vector<FillingSphere*>(NUM_DIV));
-//	m_spheres[0][0] = new FillingSphere(0, cVector3d(0, 0, radius / 1.5));
-//	for (int i = 1; i <= NUM_DIV; i++) {
-//		for (int j = 0; j < NUM_DIV; j++) {
-//			double r = (1.0 * i / NUM_DIV) * radius;
-//			double a = (1.0 * j / NUM_DIV) * 2 * M_PI;
-//			double x = r * cos(a), y = r * sin(a);
-//			double z = sqrt(radius * radius - r * r) / 1.5;
-//			m_spheres[i][j] = new FillingSphere(0, cVector3d(x, y, z));
-//		}
-//	}
-//
-//	m_verticesId.resize(NUM_DIV + 1, vector<int>(NUM_DIV));
-//	m_verticesId[0][0] = mesh->newVertex();
-//	for (int i = 1; i <= NUM_DIV; i++) {
-//		for (int j = 0; j < NUM_DIV; j++) {
-//			if (m_spheres[i][j]) {
-//				int vertexId = mesh->newVertex();
-//				mesh->m_vertices->setColor(vertexId, cColorf(0, 0, 1));
-//				m_verticesId[i][j] = vertexId;
-//			}
-//		}
-//	}
-//
-//	for (int i = 0; i < NUM_DIV; i++) {
-//		int v1 = m_verticesId[0][0], v2 = m_verticesId[1][i], v3 = m_verticesId[1][(i + 1) % NUM_DIV];
-//		mesh->newTriangle(v1, v2, v3);
-//	}
-//	for (int i = 1; i < m_spheres.size() - 1; i++) {
-//		int n = m_spheres[i].size();
-//		for (int j = 0; j < n; j++) {
-//			int v1 = m_verticesId[i][j], v2 = m_verticesId[i][(j + 1) % n];
-//			int v3 = m_verticesId[i + 1][j], v4 = m_verticesId[i + 1][(j + 1) % n];
-//			mesh->newTriangle(v1, v3, v2);
-//			mesh->newTriangle(v2, v3, v4);
-//		}
-//	}
-//	DeformableMesh::updateMesh(mesh, m_spheres, m_verticesId);
-//
-//	mesh->createAABBCollisionDetector(0.0);
-//	mesh->setStiffness(1000.0, true);
-//}
-
-bool DeformableMesh::isPointInside(cVector3d pos) {
-	bool inside = false;
-	for (int i = 0; i < mesh->getNumTriangles(); i++) {
-		int vi0 = mesh->m_triangles->getVertexIndex0(i);
-		int vi1 = mesh->m_triangles->getVertexIndex1(i);
-		int vi2 = mesh->m_triangles->getVertexIndex2(i);
-
-		cVector3d vertex0 = mesh->m_triangles->m_vertices->getLocalPos(vi0);
-		cVector3d vertex1 = mesh->m_triangles->m_vertices->getLocalPos(vi1);
-		cVector3d vertex2 = mesh->m_triangles->m_vertices->getLocalPos(vi2);
-
-		double x = pos.x(), y = pos.y();
-		cVector3d cPoint, cNormal;
-		double u, v;
-		bool intersect = cIntersectionSegmentTriangle(cVector3d(x, y, 0), cVector3d(x, y, 1),
-			vertex0, vertex1, vertex2, true, true, cPoint, cNormal, u, v);
-		if (intersect && pos.z() < cPoint.z()) {
-			return true;
+DeformableMesh* DeformableMesh::createCircularCloth(double radius) {
+	DeformableMesh* ret = new DeformableMesh();
+	ret->m_mesh = new cMesh();
+	const int N = 16;
+	vector<vector<FillingSphere*>> spheres(N, vector<FillingSphere*>(N));
+	vector<vector<int>> v_ids(N, vector<int>(N));
+	spheres[0][0] = new FillingSphere(0, cVector3d(0, 0, radius / 1.5));
+	for (int i = 1; i <= N; i++) {
+		for (int j = 0; j < N; j++) {
+			double r = (1.0 * i / N) * radius;
+			double a = (1.0 * j / N) * 2 * M_PI;
+			double x = r * cos(a), y = r * sin(a);
+			double z = sqrt(radius * radius - r * r) / 1.5;
+			spheres[i][j] = new FillingSphere(0, cVector3d(x, y, z));
 		}
 	}
-	return false;
+
+	v_ids.resize(N + 1, vector<int>(N));
+	v_ids[0][0] = ret->m_mesh->newVertex();
+	for (int i = 1; i <= N; i++) {
+		for (int j = 0; j < N; j++) {
+			if (spheres[i][j]) {
+				int vertexId = ret->m_mesh->newVertex();
+				ret->m_mesh->m_vertices->setColor(vertexId, cColorf(0, 0, 1));
+				v_ids[i][j] = vertexId;
+			}
+		}
+	}
+
+	for (int i = 0; i < N; i++) {
+		int v1 = v_ids[0][0], v2 = v_ids[1][i], v3 = v_ids[1][(i + 1) % N];
+		ret->m_mesh->newTriangle(v1, v2, v3);
+	}
+	for (int i = 1; i < N - 1; i++) {
+		for (int j = 0; j < N; j++) {
+			int v1 = v_ids[i][j], v2 = v_ids[i][(j + 1) % N];
+			int v3 = v_ids[i + 1][j], v4 = v_ids[i + 1][(j + 1) % N];
+			ret->m_mesh->newTriangle(v1, v3, v2);
+			ret->m_mesh->newTriangle(v2, v3, v4);
+		}
+	}
+	DeformableMesh::updateMesh(ret->m_mesh, ret->m_spheres, ret->m_verticesId);
+}
+
+void DeformableMesh::updateDevicePos(cVector3d pos) {
+	cVector3d contactPoint(100, 100, 100);
+	double best = 100;
+	int vvi0 = -1, vvi1 = -1, vvi2 = -1;
+	for (int i = 0; i < m_mesh->getNumTriangles(); i++) {
+		int vi0 = m_mesh->m_triangles->getVertexIndex0(i);
+		int vi1 = m_mesh->m_triangles->getVertexIndex1(i);
+		int vi2 = m_mesh->m_triangles->getVertexIndex2(i);
+
+		cVector3d vertex0 = m_mesh->m_triangles->m_vertices->getLocalPos(vi0);
+		cVector3d vertex1 = m_mesh->m_triangles->m_vertices->getLocalPos(vi1);
+		cVector3d vertex2 = m_mesh->m_triangles->m_vertices->getLocalPos(vi2);
+
+		cVector3d pt = cProjectPointOnTriangle(pos, vertex0, vertex1, vertex2);
+		double dist = (pos - pt).length();
+		if (dist < CURSOR_RADIUS && dist < (pos - contactPoint).length()) {
+			contactPoint = pt;
+			vvi0 = vi0, vvi1 = vi1, vvi2 = vi2;
+			m_triIndex = i;
+		}
+	}
+	const double stiffness = 20000.0;
+	double depth = (contactPoint - pos).length();
+	cVector3d dir = contactPoint - pos;
+	dir.normalize();
+
+	if (vvi0 != -1) {
+		m_spheres[vvi0]->user_force = 1.0 / 3 * stiffness * (CURSOR_RADIUS - depth) * dir;
+		m_spheres[vvi1]->user_force = 1.0 / 3 * stiffness * (CURSOR_RADIUS - depth) * dir;
+		m_spheres[vvi2]->user_force = 1.0 / 3 * stiffness * (CURSOR_RADIUS - depth) * dir;
+	}
+	m_devicePos = pos;
 }
 
 void DeformableMesh::update(double dt) {
 	// Check if it's necessary to update the proxy position
-	cVector3d proxyPos = m_tool->m_hapticPoint->getGlobalPosProxy();
-	cVector3d devicePos = m_tool->getDeviceGlobalPos();
-	bool proxyInside = isPointInside(proxyPos);
-	bool deviceInside = isPointInside(devicePos);
-	if (proxyInside && deviceInside) {
-		double best = 100;
-		cVector3d closest;
-		for (int i = 0; i < mesh->getNumTriangles(); i++) {
-			int vi0 = mesh->m_triangles->getVertexIndex0(i);
-			int vi1 = mesh->m_triangles->getVertexIndex1(i);
-			int vi2 = mesh->m_triangles->getVertexIndex2(i);
+	double volume = 0.00005 + computeMeshVolume();
+	double pressure = 40 / volume;
+	for (int i = 0; i < m_mesh->getNumTriangles(); i++) {
+		int vi0 = m_mesh->m_triangles->getVertexIndex0(i);
+		int vi1 = m_mesh->m_triangles->getVertexIndex1(i);
+		int vi2 = m_mesh->m_triangles->getVertexIndex2(i);
 
-			cVector3d vertex0 = mesh->m_triangles->m_vertices->getLocalPos(vi0);
-			cVector3d vertex1 = mesh->m_triangles->m_vertices->getLocalPos(vi1);
-			cVector3d vertex2 = mesh->m_triangles->m_vertices->getLocalPos(vi2);
+		cVector3d vertex0 = m_mesh->m_triangles->m_vertices->getLocalPos(vi0);
+		cVector3d vertex1 = m_mesh->m_triangles->m_vertices->getLocalPos(vi1);
+		cVector3d vertex2 = m_mesh->m_triangles->m_vertices->getLocalPos(vi2);
 
-			cVector3d pt = cProjectPointOnTriangle(proxyPos, vertex0, vertex1, vertex2);
-			if ((pt - proxyPos).length() < best) {
-				best = (pt - proxyPos).length();
-				closest = pt;
-			}
-		}
+		cVector3d sNormal = cComputeSurfaceNormal(vertex0, vertex1, vertex2);
+		sNormal.normalize();
+		double area = 0.5 * cCross(vertex1 - vertex0, vertex2 - vertex0).length();
+
+		m_spheres[vi0]->env_force = (1.0 / 3) * pressure * area * sNormal;
+		m_spheres[vi1]->env_force = (1.0 / 3) * pressure * area * sNormal;
+		m_spheres[vi2]->env_force = (1.0 / 3) * pressure * area * sNormal;
 	}
-	updateUserForce();
 	for (auto sphere : m_spheres) {
 		sphere->force = sphere->env_force + sphere->user_force;
+		sphere->user_force = cVector3d(0, 0, 0);
 	}
 	for (const auto spring : m_springs) {
 		spring->computeForce();
@@ -195,42 +223,39 @@ void DeformableMesh::update(double dt) {
 			sphere->prev_dt = dt;
 		}
 	}
-	DeformableMesh::updateMesh(mesh, m_spheres, m_verticesId);
+	DeformableMesh::updateMesh(m_mesh, m_spheres, m_verticesId);
 }
 
 cVector3d DeformableMesh::computeForce() {
-	return cVector3d();
+	if (m_triIndex == -1) {
+		return cVector3d(0, 0, 0);
+	}
+	int vi0 = m_mesh->m_triangles->getVertexIndex0(m_triIndex);
+	int vi1 = m_mesh->m_triangles->getVertexIndex1(m_triIndex);
+	int vi2 = m_mesh->m_triangles->getVertexIndex2(m_triIndex);
+
+	cVector3d cur_vert0 = m_mesh->m_triangles->m_vertices->getLocalPos(vi0);
+	cVector3d cur_vert1 = m_mesh->m_triangles->m_vertices->getLocalPos(vi1);
+	cVector3d cur_vert2 = m_mesh->m_triangles->m_vertices->getLocalPos(vi2);
+
+	cVector3d old_vert0 = m_initial_mesh[vi0];
+	cVector3d old_vert1 = m_initial_mesh[vi1];
+	cVector3d old_vert2 = m_initial_mesh[vi2];
+
+	const double stiffness = 500;
+	cVector3d force1 = stiffness * (old_vert0 - cur_vert0);
+	cVector3d force2 = stiffness * (old_vert1 - cur_vert1);
+	cVector3d force3 = stiffness * (old_vert2 - cur_vert2);
+
+	cVector3d force = 1.0 / 3 * force1 + 1.0 / 3 * force2 + 1.0 / 3 * force3;
+	if (m_disable_time > 0) {
+		return cVector3d(0, 0, 0);
+	}
+	return force;
 }
 
-void DeformableMesh::updateUserForce() {
-	/*if (force.length() < 1e-6 || !collision_evt) {
-		if (m_prev_collision) {
-			int vi0, vi1, vi2;
-			tie(vi0, vi1, vi2) = *m_prev_collision;
-			m_spheres[vi0]->user_force.zero();
-			m_spheres[vi1]->user_force.zero();
-			m_spheres[vi2]->user_force.zero();
-		}
-		m_prev_collision = NULL;
-		return;
-	}
-	int vi0 = collision_evt->m_triangles->getVertexIndex0(collision_evt->m_index);
-	int vi1 = collision_evt->m_triangles->getVertexIndex1(collision_evt->m_index);
-	int vi2 = collision_evt->m_triangles->getVertexIndex2(collision_evt->m_index);
-
-	cVector3d vertex0 = collision_evt->m_triangles->m_vertices->getLocalPos(vi0);
-	cVector3d vertex1 = collision_evt->m_triangles->m_vertices->getLocalPos(vi1);
-	cVector3d vertex2 = collision_evt->m_triangles->m_vertices->getLocalPos(vi2);
-
-	int u = collision_evt->m_posV01;
-	int v = collision_evt->m_posV02;
-	int w = 1 - u - v;
-
-	m_spheres[vi0]->user_force = w * force;
-	m_spheres[vi1]->user_force += u * force;
-	m_spheres[vi2]->user_force += v * force;
-
-	m_prev_collision = &make_tuple(vi0, vi1, vi2);*/
+void DeformableMesh::deactivate(double a_time) {
+	m_disable_time = a_time;
 }
 
 void DeformableMesh::updateMesh(
@@ -241,15 +266,14 @@ void DeformableMesh::updateMesh(
 		mesh->m_vertices->setLocalPos(verticesId[i], surfaceSpheres[i]->pos);
 	}
 	mesh->computeAllNormals();
-	mesh->createAABBCollisionDetector(0.002);
 }
 
 double DeformableMesh::computeMeshVolume(cVector3d origin) {
 	double ret = 0.0;
-	for (int i = 0; i < mesh->getNumTriangles(); i++) {
-		int vi0 = mesh->m_triangles->getVertexIndex0(i);
-		int vi1 = mesh->m_triangles->getVertexIndex1(i);
-		int vi2 = mesh->m_triangles->getVertexIndex2(i);
+	for (int i = 0; i < m_mesh->getNumTriangles(); i++) {
+		int vi0 = m_mesh->m_triangles->getVertexIndex0(i);
+		int vi1 = m_mesh->m_triangles->getVertexIndex1(i);
+		int vi2 = m_mesh->m_triangles->getVertexIndex2(i);
 		cVector3d p1 = m_spheres[vi0]->pos - origin;
 		cVector3d p2 = m_spheres[vi1]->pos - origin;
 		cVector3d p3 = m_spheres[vi2]->pos - origin;
