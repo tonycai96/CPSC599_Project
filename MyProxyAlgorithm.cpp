@@ -14,14 +14,15 @@
 */
 //==============================================================================
 
+#include <vector>
+#include <iostream>
 #include "MyProxyAlgorithm.h"
 #include "DeformableMesh.h"
 
 using namespace chai3d;
 
-MyProxyAlgorithm::MyProxyAlgorithm(DeformableMesh* mesh) {
-	m_mesh = mesh;
-}
+MyProxyAlgorithm::MyProxyAlgorithm(std::vector<DeformableMesh*> bubbles) 
+	: m_bubbles(bubbles) {}
 
 //==============================================================================
 /*!
@@ -64,6 +65,14 @@ void MyProxyAlgorithm::updateForce()
 
 	if (m_numCollisionEvents > 0)
 	{
-		m_mesh->applyForce(m_lastGlobalForce);
+		// std::cout << "FOO\n";
+		cCollisionEvent* c0 = &m_collisionRecorderConstraint0.m_nearestCollision;
+		for (auto bubble : m_bubbles) {
+			if (c0->m_object == bubble->mesh) {
+				bubble->applyForce(c0, m_lastGlobalForce);
+			} else {
+				bubble->applyForce(NULL, cVector3d(0, 0, 0));
+			}
+		}
 	}
 }

@@ -17,6 +17,7 @@
 #ifndef MYPROXYALGORITHM_H
 #define MYPROXYALGORITHM_H
 
+#include <vector>
 #include "chai3d.h"
 
 //------------------------------------------------------------------------------
@@ -25,13 +26,13 @@ class DeformableMesh;
 class MyProxyAlgorithm : public chai3d::cAlgorithmFingerProxy
 {
 public:
-	MyProxyAlgorithm(DeformableMesh* mesh);
+	MyProxyAlgorithm(std::vector<DeformableMesh*> bubbles);
 
 protected:
     virtual void updateForce();
 
 private:
-	DeformableMesh* m_mesh;
+	std::vector<DeformableMesh*> m_bubbles;
 };
 
 //------------------------------------------------------------------------------

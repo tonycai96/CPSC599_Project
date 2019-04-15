@@ -254,7 +254,8 @@ int main(int argc, char* argv[])
 
 	world->addChild(ground);
 
-	bubble = new DeformableMesh(0.05);
+	bubble = DeformableMesh::createSquareCloth(0.10);
+	bubble->mesh->translate(cVector3d(0, 0, -0.02));
 	world->addChild(bubble->mesh);
 
     // create a camera and insert it into the virtual world
@@ -316,7 +317,7 @@ int main(int argc, char* argv[])
 	//tool->translate(0.1, 0.0, 0.0);
 
 	// [CPSC.86] replace the tool's proxy rendering algorithm with our own
-	MyProxyAlgorithm* proxyAlgorithm = new MyProxyAlgorithm(bubble);
+	MyProxyAlgorithm* proxyAlgorithm = new MyProxyAlgorithm({ bubble });
 	delete tool->m_hapticPoint->m_algorithmFingerProxy;
 	tool->m_hapticPoint->m_algorithmFingerProxy = proxyAlgorithm;
 
@@ -520,6 +521,10 @@ void updateHaptics(void)
     simulationRunning  = true;
     simulationFinished = false;
 
+	cPrecisionClock timer;
+	timer.start();
+	double t_previous = -1.0;
+
     // main haptic simulation loop
     while(simulationRunning)
     {
@@ -556,6 +561,13 @@ void updateHaptics(void)
 		cVector3d force(0, 0, 0);
 		cVector3d torque(0, 0, 0);
 		double gripperForce = 0.0;
+
+		double t_current = timer.getCurrentTimeSeconds();
+		if (t_previous > 0.0) {
+			double dt = t_current - t_previous;
+			bubble->update(dt);
+		}
+		t_previous = t_current;
 
 		/////////////////////////////////////////////////////////////////////
 		// APPLY FORCES

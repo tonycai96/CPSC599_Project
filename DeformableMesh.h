@@ -9,20 +9,25 @@ class LinearSpring;
 
 class DeformableMesh {
 public:
-	DeformableMesh(double radius);
+	static DeformableMesh* createSquareCloth(double length);
+	// static DeformableMesh* createCircularCloth(double radius);
 	void update(double dt);
-	void applyForce(cVector3d force);
+	void applyForce(cCollisionEvent* evt, cVector3d force);
 
 	cMesh* mesh;
 
 private:
 	static void DeformableMesh::updateMesh(
 		cMesh* mesh,
-		vector<vector<FillingSphere*>> surfaceSpheres,
-		vector<vector<int>> verticesId);
+		vector<FillingSphere*> surfaceSpheres,
+		vector<int> verticesId);
 
+	double computeMeshVolume();
+
+	DeformableMesh() {}
 	vector<LinearSpring*> m_springs;
 	vector<FillingSphere*> m_spheres;
-	vector<vector<FillingSphere*>> m_surfaceSpheres;
-	vector<vector<int>> m_verticesId;
+	vector<int> m_verticesId;
+	vector<tuple<int, int, int>> m_triangles;
+	tuple<int, int, int>* m_prev_collision;
 };
