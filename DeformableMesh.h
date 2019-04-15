@@ -6,15 +6,19 @@ using namespace chai3d;
 
 class FillingSphere;
 class LinearSpring;
+class MyProxyAlgorithm;
 
 class DeformableMesh {
 public:
 	static DeformableMesh* createSquareCloth(double length);
 	// static DeformableMesh* createCircularCloth(double radius);
 	void update(double dt);
-	void applyForce(cCollisionEvent* evt, cVector3d force);
+	void updateUserForce();
+	cVector3d computeForce();
 
 	cMesh* mesh;
+	cToolCursor* m_tool;
+	bool DeformableMesh::isPointInside(cVector3d pos);
 
 private:
 	static void DeformableMesh::updateMesh(
@@ -22,12 +26,12 @@ private:
 		vector<FillingSphere*> surfaceSpheres,
 		vector<int> verticesId);
 
-	double computeMeshVolume();
+	double computeMeshVolume(cVector3d origin = cVector3d(0, 0, 0));
 
-	DeformableMesh() {}
+	DeformableMesh() : m_triIndex(-1) {}
 	vector<LinearSpring*> m_springs;
 	vector<FillingSphere*> m_spheres;
 	vector<int> m_verticesId;
 	vector<tuple<int, int, int>> m_triangles;
-	tuple<int, int, int>* m_prev_collision;
+	int m_triIndex;
 };

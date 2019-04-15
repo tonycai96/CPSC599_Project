@@ -38,7 +38,7 @@ DeformableMesh* DeformableMesh::createSquareCloth(double length) {
 	}
 	DeformableMesh::updateMesh(ret->mesh, ret->m_spheres, ret->m_verticesId);
 	ret->mesh->setStiffness(1000.0, true);
-	ret->mesh->createAABBCollisionDetector(0.0);
+	ret->mesh->createAABBCollisionDetector(0.002);
 
 	for (int i = 0; i < N; i++) {
 		spheres[0][i]->isFixed = true;
@@ -132,7 +132,55 @@ DeformableMesh* DeformableMesh::createSquareCloth(double length) {
 //	mesh->setStiffness(1000.0, true);
 //}
 
+bool DeformableMesh::isPointInside(cVector3d pos) {
+	bool inside = false;
+	for (int i = 0; i < mesh->getNumTriangles(); i++) {
+		int vi0 = mesh->m_triangles->getVertexIndex0(i);
+		int vi1 = mesh->m_triangles->getVertexIndex1(i);
+		int vi2 = mesh->m_triangles->getVertexIndex2(i);
+
+		cVector3d vertex0 = mesh->m_triangles->m_vertices->getLocalPos(vi0);
+		cVector3d vertex1 = mesh->m_triangles->m_vertices->getLocalPos(vi1);
+		cVector3d vertex2 = mesh->m_triangles->m_vertices->getLocalPos(vi2);
+
+		double x = pos.x(), y = pos.y();
+		cVector3d cPoint, cNormal;
+		double u, v;
+		bool intersect = cIntersectionSegmentTriangle(cVector3d(x, y, 0), cVector3d(x, y, 1),
+			vertex0, vertex1, vertex2, true, true, cPoint, cNormal, u, v);
+		if (intersect && pos.z() < cPoint.z()) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void DeformableMesh::update(double dt) {
+	// Check if it's necessary to update the proxy position
+	cVector3d proxyPos = m_tool->m_hapticPoint->getGlobalPosProxy();
+	cVector3d devicePos = m_tool->getDeviceGlobalPos();
+	bool proxyInside = isPointInside(proxyPos);
+	bool deviceInside = isPointInside(devicePos);
+	if (proxyInside && deviceInside) {
+		double best = 100;
+		cVector3d closest;
+		for (int i = 0; i < mesh->getNumTriangles(); i++) {
+			int vi0 = mesh->m_triangles->getVertexIndex0(i);
+			int vi1 = mesh->m_triangles->getVertexIndex1(i);
+			int vi2 = mesh->m_triangles->getVertexIndex2(i);
+
+			cVector3d vertex0 = mesh->m_triangles->m_vertices->getLocalPos(vi0);
+			cVector3d vertex1 = mesh->m_triangles->m_vertices->getLocalPos(vi1);
+			cVector3d vertex2 = mesh->m_triangles->m_vertices->getLocalPos(vi2);
+
+			cVector3d pt = cProjectPointOnTriangle(proxyPos, vertex0, vertex1, vertex2);
+			if ((pt - proxyPos).length() < best) {
+				best = (pt - proxyPos).length();
+				closest = pt;
+			}
+		}
+	}
+	updateUserForce();
 	for (auto sphere : m_spheres) {
 		sphere->force = sphere->env_force + sphere->user_force;
 	}
@@ -150,8 +198,12 @@ void DeformableMesh::update(double dt) {
 	DeformableMesh::updateMesh(mesh, m_spheres, m_verticesId);
 }
 
-void DeformableMesh::applyForce(cCollisionEvent* collision_evt, cVector3d force) {
-	if (force.length() < 1e-6 || !collision_evt) {
+cVector3d DeformableMesh::computeForce() {
+	return cVector3d();
+}
+
+void DeformableMesh::updateUserForce() {
+	/*if (force.length() < 1e-6 || !collision_evt) {
 		if (m_prev_collision) {
 			int vi0, vi1, vi2;
 			tie(vi0, vi1, vi2) = *m_prev_collision;
@@ -166,7 +218,7 @@ void DeformableMesh::applyForce(cCollisionEvent* collision_evt, cVector3d force)
 	int vi1 = collision_evt->m_triangles->getVertexIndex1(collision_evt->m_index);
 	int vi2 = collision_evt->m_triangles->getVertexIndex2(collision_evt->m_index);
 
-	/*cVector3d vertex0 = collision_evt->m_triangles->m_vertices->getLocalPos(vi0);
+	cVector3d vertex0 = collision_evt->m_triangles->m_vertices->getLocalPos(vi0);
 	cVector3d vertex1 = collision_evt->m_triangles->m_vertices->getLocalPos(vi1);
 	cVector3d vertex2 = collision_evt->m_triangles->m_vertices->getLocalPos(vi2);
 
@@ -189,17 +241,18 @@ void DeformableMesh::updateMesh(
 		mesh->m_vertices->setLocalPos(verticesId[i], surfaceSpheres[i]->pos);
 	}
 	mesh->computeAllNormals();
-	mesh->createAABBCollisionDetector(0.0);
+	mesh->createAABBCollisionDetector(0.002);
 }
 
-double DeformableMesh::computeMeshVolume() {
+double DeformableMesh::computeMeshVolume(cVector3d origin) {
 	double ret = 0.0;
-	for (tuple<int, int, int> tri : m_triangles) {
-		int v1, v2, v3;
-		std::tie(v1, v2, v3) = tri;
-		cVector3d p1 = m_spheres[v1]->pos;
-		cVector3d p2 = m_spheres[v2]->pos;
-		cVector3d p3 = m_spheres[v3]->pos;
+	for (int i = 0; i < mesh->getNumTriangles(); i++) {
+		int vi0 = mesh->m_triangles->getVertexIndex0(i);
+		int vi1 = mesh->m_triangles->getVertexIndex1(i);
+		int vi2 = mesh->m_triangles->getVertexIndex2(i);
+		cVector3d p1 = m_spheres[vi0]->pos - origin;
+		cVector3d p2 = m_spheres[vi1]->pos - origin;
+		cVector3d p3 = m_spheres[vi2]->pos - origin;
 		double v321 = p3.x()*p2.y()*p1.z();
 		double v231 = p2.x()*p3.y()*p1.z();
 		double v312 = p3.x()*p1.y()*p2.z();

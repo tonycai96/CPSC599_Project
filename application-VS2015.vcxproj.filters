@@ -19,9 +19,6 @@
     <ClCompile Include="DeformableMesh.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="MyProxyAlgorithm.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="LinearSpring.h">
@@ -31,9 +28,6 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="DeformableMesh.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MyProxyAlgorithm.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>

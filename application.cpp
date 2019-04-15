@@ -7,7 +7,6 @@
 //------------------------------------------------------------------------------
 #include "chai3d.h"
 #include "DeformableMesh.h"
-#include "MyProxyAlgorithm.h"
 //------------------------------------------------------------------------------
 #include <GLFW/glfw3.h>
 //------------------------------------------------------------------------------
@@ -248,14 +247,14 @@ int main(int argc, char* argv[])
 	ground->m_triangles->newTriangle(vertex0, vertex1, vertex2);
 	ground->m_triangles->newTriangle(vertex0, vertex2, vertex3);
 
-	ground->createAABBCollisionDetector(0);
+	ground->createAABBCollisionDetector(0.005);
 	ground->m_material->setUseHapticShading(true);
 	ground->setStiffness(2000.0, true);
 
 	world->addChild(ground);
-
+	
 	bubble = DeformableMesh::createSquareCloth(0.10);
-	bubble->mesh->translate(cVector3d(0, 0, -0.02));
+	bubble->mesh->translate(cVector3d(0, 0, -0.01));
 	world->addChild(bubble->mesh);
 
     // create a camera and insert it into the virtual world
@@ -314,22 +313,18 @@ int main(int argc, char* argv[])
 	tool = new cToolCursor(world);
 	world->addChild(tool);
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	//tool->translate(0.1, 0.0, 0.0);
-
-	// [CPSC.86] replace the tool's proxy rendering algorithm with our own
-	MyProxyAlgorithm* proxyAlgorithm = new MyProxyAlgorithm({ bubble });
-	delete tool->m_hapticPoint->m_algorithmFingerProxy;
-	tool->m_hapticPoint->m_algorithmFingerProxy = proxyAlgorithm;
 
 	tool->m_hapticPoint->m_sphereProxy->m_material->setWhite();
 
-	tool->setRadius(0.001, 0);
+	tool->setRadius(0.002, 0.002);
 
 	tool->setHapticDevice(hapticDevice);
 
 	tool->setWaitForSmallForce(true);
 
 	tool->start();
+
+	bubble->m_tool = tool;
 
     //--------------------------------------------------------------------------
     // WIDGETS
@@ -550,30 +545,24 @@ void updateHaptics(void)
 		// UPDATE 3D CURSOR MODEL
 		/////////////////////////////////////////////////////////////////////
 
-		tool->updateFromDevice();
-
 		/////////////////////////////////////////////////////////////////////
 		// COMPUTE FORCES
 		/////////////////////////////////////////////////////////////////////
-
-		tool->computeInteractionForces();
-
-		cVector3d force(0, 0, 0);
-		cVector3d torque(0, 0, 0);
-		double gripperForce = 0.0;
-
 		double t_current = timer.getCurrentTimeSeconds();
 		if (t_previous > 0.0) {
 			double dt = t_current - t_previous;
-			bubble->update(dt);
+			bubble->update(0.5 * dt);
 		}
 		t_previous = t_current;
+
+		tool->updateFromDevice();
+		tool->computeInteractionForces();
 
 		/////////////////////////////////////////////////////////////////////
 		// APPLY FORCES
 		/////////////////////////////////////////////////////////////////////
-
 		tool->applyToDevice();
+
         // signal frequency counter
         freqCounterHaptics.signal(1);
     }
